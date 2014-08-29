@@ -308,26 +308,24 @@ namespace System.IO //  <-- Namespace may be changed.
                  * segment.
                  * If the new position is before the current one, I look behind until the segment progress
                  * is less than or equal to the new position - that segment contains the new position.
-                 * Also, if the position equals the length, the case is handled specifically to avoid
-                 * having to handle additional cases in the loop.
+                 * Also, when the position is equal to the buffer's capacity, there is no next segment to
+                 * move to. However, they may be one when the position is equal to the length, because the
+                 * length may be lower than or equal to the capacity.
                  */
 
                 if (value > this.pos)
                 {
-                    if (value == this.len)  //  Turning a whole loop and 3 assignments into one line of code. I love C#.
-                        this.segCurProg = this.segs.Sum(seg => seg.cnt) - (this.segCurPos = (this.segCur = this.segs[this.segCurIndex = this.segs.Count - 1]).cnt); //  Evil.
-                    else
-                        for (int i = this.segCurIndex; i < this.segs.Count; i++)
-                            if (value - this.segCurProg < this.segs[i].cnt)
-                            {
-                                this.segCurIndex = i;
-                                this.segCur = this.segs[i];
-                                this.segCurPos = value - this.segCurProg;
+                    for (int i = this.segCurIndex; i < this.segs.Count; i++)
+                        if (value - this.segCurProg < this.segs[i].cnt || (value - this.segCurProg == this.segs[i].cnt && value == this.cap))
+                        {
+                            this.segCurIndex = i;
+                            this.segCur = this.segs[i];
+                            this.segCurPos = value - this.segCurProg;
 
-                                break;
-                            }
-                            else
-                                this.segCurProg += this.segs[i].cnt;
+                            break;
+                        }
+                        else
+                            this.segCurProg += this.segs[i].cnt;
                 }
                 else if (value < this.pos)
                 {

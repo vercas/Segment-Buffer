@@ -16,7 +16,8 @@
  *  Any closed source distribution of the Software shall properly credit the
  *  copyright holders unless such a feature is impossible.
  *  Any modified versions of the Software must be available to the public,
- *  as is the Software.
+ *  as is the Software. Should the modifications be substantial, the author
+ *  may append their copyright notice to the current ones.
  * 
  *  THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,

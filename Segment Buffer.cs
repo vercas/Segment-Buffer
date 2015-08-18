@@ -29,9 +29,11 @@
  * 
  */
 
-#if NET_4_5_PLUS
-#define SEGMENTBUFFER_USEASYNC
-#endif
+//  Feel free to use find-and-replace to substitute every instance of
+//  `Vercas.Utilities` in this file with your own namespace.
+
+#define SEGMENTBUFFER_USEASYNC  //  <-- This line may be (un)commented
+//#define SEGMENTBUFFER_RELEASESEGMENTS //  <-- This line may be (un)commented
 
 using System;
 using System.IO;
@@ -41,13 +43,13 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace System.IO //  <-- Namespace may be changed.
+namespace Vercas.Utilities //  <-- Namespace may be changed.
 {
     /// <summary>
     /// Presents arbitrary chunks of bytes as a continuous stream.
     /// </summary>
     [CLSCompliant(true)]    //  <-- This attribute may be removed.
-    public partial class SegmentBuffer
+    public sealed class SegmentBuffer
         : Stream
     {
         #region Constants
@@ -66,19 +68,29 @@ namespace System.IO //  <-- Namespace may be changed.
         private int _disposalStatus = 0;
 
         /// <summary>
-        /// Releases the unmanaged resources used by the <see cref="System.IO.SegmentBuffer"/> and optionally releases the managed resources.
+        /// Releases the unmanaged resources used by the <see cref="Vercas.Utilities.SegmentBuffer"/> and optionally releases the managed resources.
         /// </summary>
         /// <param name="disposing"></param>
         protected override void Dispose(bool disposing)
         {
             if (Interlocked.Exchange(ref _disposalStatus, -1) != -1)
             {
+#if SEGMENTBUFFER_RELEASESEGMENTS
+                if (0 != (this.mode & SegmentBufferModes.ReleaseSegments))
+                    foreach (var seg in this.segs)
+                        try
+                        {
+                            seg.arr.Release();
+                        }
+                        catch { }
+#endif
+
                 this.segs = null;   //  I see that setting all references to null is common practice in the .NET source code, so I shall do the same for it will not hurt.
             }
         }
 
         /// <summary>
-        /// Marks the the write buffer as finished, resetting the position within the buffer and allowing it to be read back.
+        /// Marks the the write buffer as finished, resetting the position within the buffer and forbidding further writing.
         /// </summary>
         /// <exception cref="System.ObjectDisposedException">Thrown when the buffer is disposed.</exception>
         /// <exception cref="System.InvalidOperationException">Thrown when the buffer is in read mode or is already finished.</exception>
@@ -128,19 +140,19 @@ namespace System.IO //  <-- Namespace may be changed.
         #region Constructors
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="System.IO.SegmentBuffer"/> class with the specified mode of operation, initial data and initial position.
+        /// Initializes a new instance of the <see cref="Vercas.Utilities.SegmentBuffer"/> class with the specified mode of operation, initial data and initial position.
         /// </summary>
         /// <remarks>
-        /// When using <see cref="System.IO.SegmentBufferModes.Read"/> mode, initial data has to be specified.
-        /// <para>When using <see cref="System.IO.SegmentBufferModes.Write"/> mode and data is null, the initial back-end data will be sized exponentially to contain the initial position and still have some space after it to write (at least one byte).</para>
+        /// When using <see cref="Vercas.Utilities.SegmentBufferModes.Read"/> mode, initial data has to be specified.
+        /// <para>When using <see cref="Vercas.Utilities.SegmentBufferModes.Write"/> mode and data is null, the initial back-end data will be sized exponentially to contain the initial position and still have some space after it to write (at least one byte).</para>
         /// <para>The initial value for the new segment length is based on a common page size, minus the extra data contained in the segment class. Padding is accounted for as well and some extra bytes are removed just to be sure.</para>
         /// </remarks>
         /// <param name="mode">Buffer operation mode(s).</param>
         /// <param name="data">A sequence of byte array segments representing initial data for the buffer.</param>
         /// <param name="pos">Initian position in the buffer.</param>
         /// <param name="segmentLength">optional; The length of the data segments which will be created, if necessary.</param>
-        /// <exception cref="System.ArgumentNullException">Thrown when the given initial <paramref name="data"/> is null when the buffer <paramref name="mode"/> is <see cref="System.IO.SegmentBufferModes.Read"/>.</exception>
-        /// <exception cref="System.ArgumentOutOfRangeException">Thrown when there is a contradiction in the buffer <paramref name="mode"/>s -or- the initial <paramref name="data"/> enumeration contains no elements or no bytes when the buffer <paramref name="mode"/> is <see cref="System.IO.SegmentBufferModes.Read"/> -or- the initial position (<paramref name="pos"/>) is negative or beyond the end of the initial data when un-expandable -or- <paramref name="segmentLength"/> is not strictly positive when used.</exception>
+        /// <exception cref="System.ArgumentNullException">Thrown when the given initial <paramref name="data"/> is null when the buffer <paramref name="mode"/> is <see cref="Vercas.Utilities.SegmentBufferModes.Read"/>.</exception>
+        /// <exception cref="System.ArgumentOutOfRangeException">Thrown when there is a contradiction in the buffer <paramref name="mode"/>s -or- the initial <paramref name="data"/> enumeration contains no elements or no bytes when the buffer <paramref name="mode"/> is exclusively <see cref="Vercas.Utilities.SegmentBufferModes.Read"/> -or- the initial position (<paramref name="pos"/>) is negative or beyond the end of the initial data when un-expandable -or- <paramref name="segmentLength"/> is not strictly positive when used.</exception>
         public SegmentBuffer(SegmentBufferModes mode, IEnumerable<ArraySegment<byte>> data, long pos, long segmentLength = DefaultSegmentLength)
         {
             if (pos < 0L)
@@ -151,8 +163,8 @@ namespace System.IO //  <-- Namespace may be changed.
 
             if ((mode & SegmentBufferModes.Write) != 0)
             {
-                if ((mode & SegmentBufferModes.Read) != 0)
-                    throw new ArgumentOutOfRangeException("mode", mode, "Cannot use read and write modes at the same time.");
+                //if ((mode & SegmentBufferModes.Read) != 0)
+                //    throw new ArgumentOutOfRangeException("mode", mode, "Cannot use read and write modes at the same time.");
 
                 this.len = pos; //  Normally, it would start at length 0, but the position must not exceed the length.
 
@@ -379,9 +391,9 @@ namespace System.IO //  <-- Namespace may be changed.
 
                 while (count > 0)
                 {
-                    int writeAmount = Math.Min((int)this.segCur.cnt - (int)this.segCurPos, count); //  As much as possible within the current segment.
+                    int writeAmount = Math.Min((int)(this.segCur.cnt - this.segCurPos), count); //  As much as possible within the current segment.
 
-                    System.Buffer.BlockCopy(minibuf, offset, this.segCur.arr, (int)(this.segCur.off + this.segCurPos), writeAmount);
+                    Buffer.BlockCopy(minibuf, offset, this.segCur.arr, (int)(this.segCur.off + this.segCurPos), writeAmount);
 
                     offset += writeAmount;  //  Increase the offset within the mini-buffer.
                     count -= writeAmount;   //  Decrease the number of bytes left to write.
@@ -398,7 +410,7 @@ namespace System.IO //  <-- Namespace may be changed.
         /// <param name="count">The maximum number of bytes to read from the buffer.</param>
         /// <returns>The total number of bytes read into the minibuf. This can be less than the number of bytes requested if that many bytes are not currently available, or zero (0) if the end of the buffer has been reached.</returns>
         /// <exception cref="System.ObjectDisposedException">Thrown when the buffer is disposed.</exception>
-        /// <exception cref="System.InvalidOperationException">Thrown when the buffer is in write mode.</exception>
+        /// <exception cref="System.InvalidOperationException">Thrown when the buffer is exclusively in write mode.</exception>
         /// <exception cref="System.ArgumentNullException">Thrown when the given minibuf is null.</exception>
         /// <exception cref="System.ArgumentOutOfRangeException">Thrown when the given offset is negative or beyond the length of minibuf -or- count is negative -or- the given count added to the offset goes beyond the length of minibuf.</exception>
         public override int Read(byte[] minibuf, int offset, int count)
@@ -419,9 +431,9 @@ namespace System.IO //  <-- Namespace may be changed.
 
             while (count > 0)
             {
-                int readAmount = Math.Min((int)this.segCur.cnt - (int)this.segCurPos, count); //  As much as possible within the current segment.
+                int readAmount = Math.Min((int)(this.segCur.cnt - this.segCurPos), count); //  As much as possible within the current segment.
 
-                System.Buffer.BlockCopy(this.segCur.arr, (int)(this.segCur.off + this.segCurPos), minibuf, offset, readAmount);
+                Buffer.BlockCopy(this.segCur.arr, (int)(this.segCur.off + this.segCurPos), minibuf, offset, readAmount);
 
                 offset += readAmount;  //  Increase the offset within the mini-buffer.
                 count -= readAmount;   //  Decrease the number of bytes left to read.
@@ -537,7 +549,7 @@ namespace System.IO //  <-- Namespace may be changed.
             if (this._disposalStatus == -1)
                 throw new ObjectDisposedException(this.GetType().FullName);
             if ((this.mode & SegmentBufferModes.Read) == 0 && this._disposalStatus != 1)
-                throw new InvalidOperationException("Buffer is in write mode.");
+                throw new InvalidOperationException("Buffer is exclusively in write mode.");
         }
 
         private int min(int a, long b, int c)
@@ -570,7 +582,7 @@ namespace System.IO //  <-- Namespace may be changed.
         /// <param name="minibuf">An array of bytes. When this method returns, the minibuf contains the specified byte array with the values replaced by the bytes read from the buffer.</param>
         /// <returns>The total number of bytes read into the minibuf. This can be less than the length of minibuf if that many bytes are not currently available, or zero (0) if the end of the buffer has been reached.</returns>
         /// <exception cref="System.ObjectDisposedException">Thrown when the buffer is disposed.</exception>
-        /// <exception cref="System.InvalidOperationException">Thrown when the buffer is in write mode.</exception>
+        /// <exception cref="System.InvalidOperationException">Thrown when the buffer is exclusively in write mode.</exception>
         /// <exception cref="System.ArgumentNullException">Thrown when the given minibuf is null.</exception>
         public int Read(byte[] minibuf)
         {
@@ -595,7 +607,7 @@ namespace System.IO //  <-- Namespace may be changed.
         /// <param name="minibuf">A segment of an array of bytes. When this method returns, the minibuf contains the specified byte array with the values within the segment replaced by the bytes read from the buffer.</param>
         /// <returns>The total number of bytes read into the minibuf. This can be less than the segment count of minibuf if that many bytes are not currently available, or zero (0) if the end of the buffer has been reached.</returns>
         /// <exception cref="System.ObjectDisposedException">Thrown when the buffer is disposed.</exception>
-        /// <exception cref="System.InvalidOperationException">Thrown when the buffer is in write mode.</exception>
+        /// <exception cref="System.InvalidOperationException">Thrown when the buffer is exclusively in write mode.</exception>
         public int Read(ArraySegment<byte> minibuf)
         {
             return Read(minibuf.Array, minibuf.Offset, minibuf.Count);
@@ -622,7 +634,7 @@ namespace System.IO //  <-- Namespace may be changed.
         /// </summary>
         /// <returns>The unsigned byte cast to a <see cref="System.Int32"/>, or -1 if at the end of the buffer.</returns>
         /// <exception cref="System.ObjectDisposedException">Thrown when the buffer is disposed.</exception>
-        /// <exception cref="System.InvalidOperationException">Thrown when the buffer is in write mode.</exception>
+        /// <exception cref="System.InvalidOperationException">Thrown when the buffer is exclusively in write mode.</exception>
         public override int ReadByte()
         {
             _checkRead();
@@ -689,7 +701,7 @@ namespace System.IO //  <-- Namespace may be changed.
         /// <param name="target">Stream into which to write the data read from the buffer.</param>
         /// <param name="count">Amount of bytes to read.</param>
         /// <exception cref="System.ObjectDisposedException">Thrown when the buffer is disposed.</exception>
-        /// <exception cref="System.InvalidOperationException">Thrown when the buffer is in write mode.</exception>
+        /// <exception cref="System.InvalidOperationException">Thrown when the buffer is exclusively in write mode.</exception>
         /// <exception cref="System.IO.EndOfStreamException">Thrown when the buffer does not contain the given <paramref name="count"/> of data.</exception>
         /// <exception cref="System.ArgumentNullException">Thrown when the given <paramref name="target"/> stream is null.</exception>
         /// <exception cref="System.NotSupportedException">Thrown when the <paramref name="target"/> stream cannot be written to.</exception>
@@ -773,7 +785,7 @@ namespace System.IO //  <-- Namespace may be changed.
         /// <param name="target">Stream into which to write the data read from the buffer.</param>
         /// <param name="count">Amount of bytes to read.</param>
         /// <exception cref="System.ObjectDisposedException">Thrown when the buffer is disposed.</exception>
-        /// <exception cref="System.InvalidOperationException">Thrown when the buffer is in write mode.</exception>
+        /// <exception cref="System.InvalidOperationException">Thrown when the buffer is exclusively in write mode.</exception>
         /// <exception cref="System.IO.EndOfStreamException">Thrown when the buffer does not contain the given <paramref name="count"/> of data.</exception>
         /// <exception cref="System.ArgumentNullException">Thrown when the given <paramref name="target"/> stream is null.</exception>
         /// <exception cref="System.NotSupportedException">Thrown when the <paramref name="target"/> stream cannot be written to.</exception>
@@ -805,6 +817,40 @@ namespace System.IO //  <-- Namespace may be changed.
 #endif
 
         #endregion
+
+        /// <summary>
+        /// Returns a single array segment representing all the data in the buffer, optionally assemblying all underlying segments together.
+        /// </summary>
+        /// <param name="assembleIfNecessary">True to concatenate all current segments into a new one if more than one; otherwise false to return null.</param>
+        /// <returns></returns>
+        /// <exception cref="System.ObjectDisposedException">The buffer is disposed.</exception>
+        /// <exception cref="System.InvalidOperationException">The buffer is exclusively in write mode.</exception>
+        /// <exception cref="System.OverflowException">The buffer is too long to be copied into a CLR byte array.</exception>
+        public ArraySegment<byte>? ToArray(bool assembleIfNecessary = true)
+        {
+            _checkRead();
+
+            if (this.segs.Count == 0)
+                return new ArraySegment<byte>(new byte[0], 0, 0);
+            else if (this.segs.Count == 1)
+                return new ArraySegment<byte>(this.segCur.arr, (int)this.segCur.off, (int)this.segCur.cnt);
+            else if (assembleIfNecessary)
+            {
+                if (this.len > int.MaxValue)    //  Anything greater will result in a System.OverflowException when the array is created!
+                    throw new OverflowException("Segment buffer too long to fit into a CLR byte array.");
+
+                byte[] minibuf = new byte[this.len];
+
+                long curPos = this.pos;
+                this.Position = 0;
+                this.Read(minibuf);
+                this.Position = curPos;
+
+                return new ArraySegment<byte>(minibuf);
+            }
+            
+            return null;
+        }
 
 #if SEGMENTATION_DEBUG
 #pragma warning disable 1591    //  Ya' need no documentation for these.
@@ -847,7 +893,7 @@ namespace System.IO //  <-- Namespace may be changed.
         {
             byte[] arr = new byte[seg.Count];
 
-            System.Buffer.BlockCopy(seg.Array, seg.Offset, arr, 0, seg.Count);
+            Buffer.BlockCopy(seg.Array, seg.Offset, arr, 0, seg.Count);
 
             return new ByteArraySegment(arr, 0, arr.LongLength, external);
         }
@@ -877,7 +923,7 @@ namespace System.IO //  <-- Namespace may be changed.
                 lastLength = 0L; //  Repurposing variable for the offset within the new array!
                 for (; sgarind <= sgarTempInd; sgarind++)
                 {
-                    System.Buffer.BlockCopy(sgar[sgarind].Array, sgar[sgarind].Offset, arr, (int)lastLength, sgar[sgarind].Count);
+                    Buffer.BlockCopy(sgar[sgarind].Array, sgar[sgarind].Offset, arr, (int)lastLength, sgar[sgarind].Count);
                     lastLength += sgar[sgarind].Count;
                 }
 
@@ -888,7 +934,7 @@ namespace System.IO //  <-- Namespace may be changed.
     }
 
     /// <summary>
-    /// Possible modes of operation for <see cref="System.IO.SegmentBuffer"/>s.
+    /// Possible modes of operation for <see cref="Vercas.Utilities.SegmentBuffer"/>s.
     /// </summary>
     [Flags]
     public enum SegmentBufferModes
@@ -910,5 +956,12 @@ namespace System.IO //  <-- Namespace may be changed.
         /// Preserves the initial data given to the buffer for writing (does not make a copy).
         /// </summary>
         PreserveInitialData = 0x0020,
+
+#if SEGMENTBUFFER_RELEASESEGMENTS
+        /// <summary>
+        /// Releases the arrays behind segments on disposal.
+        /// </summary>
+        ReleaseSegments = 0x0100,
+#endif
     }
 }
